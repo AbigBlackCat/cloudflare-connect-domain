@@ -1,39 +1,39 @@
-# Domain onboarding and Worker cutover
+# 域名接入与 Worker 切换流程
 
-Use this reference when a website already works on Cloudflare and the user later obtains a domain.
+网站已经能通过 Cloudflare 访问，用户之后获得域名时读取本文。
 
-## Phase 1: baseline and DNS inventory
+## 阶段一：保存基线与盘点 DNS
 
-Record the working `workers.dev` URL and test it before touching DNS. Resolve and save the current nameservers and all important records, especially MX, SPF, DKIM, DMARC, verification TXT records, and third-party subdomains. For a live domain, establish a rollback record before cutover.
+修改 DNS 前，记录可用的 `workers.dev` 地址并完成一次访问测试。查询并保存当前 nameservers 和关键 DNS 记录，尤其是 MX、SPF、DKIM、DMARC、验证 TXT 和第三方子域名。对于已经在使用的域名，必须准备可回退的原始记录。
 
-Clarify the desired result:
+先确认希望访问者最终使用哪个地址：
 
-- canonical apex: `https://example.com`
-- canonical `www`: `https://www.example.com`
-- application subdomain: `https://app.example.com`
+- 根域名作为主站：`https://example.com`
+- `www` 作为主站：`https://www.example.com`
+- 应用子域名：`https://app.example.com`
 
-A Worker Custom Domain is exact-hostname based. Choosing one does not automatically configure the others.
+Worker Custom Domain 按精确主机名匹配。配置其中一个不会自动配置其他入口。
 
-## Phase 2: move authoritative DNS to Cloudflare
+## 阶段二：把权威 DNS 迁移到 Cloudflare
 
-1. Add the apex domain to the correct Cloudflare account. A normal Free or Pro onboarding is a full zone setup.
-2. Review the DNS scan and manually restore anything missing before nameserver cutover.
-3. If the old delegation uses DNSSEC, remove or disable the old DS record as directed by the registrar before replacing nameservers. Changing nameservers with stale DNSSEC can make the domain unreachable.
-4. At the registrar, replace the existing authoritative nameservers with the two names assigned by Cloudflare, copied exactly.
-5. Wait for the zone to become active. Independently check NS answers; cached public resolvers can lag.
-6. After the Cloudflare zone is active, enable DNSSEC in Cloudflare if desired and publish the new DS information through the registrar when the setup requires it.
+1. 把根域名加入正确的 Cloudflare 账号。Free 或 Pro 计划通常使用 full zone setup。
+2. 检查 Cloudflare 扫描到的 DNS 记录，在更换 nameservers 前补回遗漏项。
+3. 如果旧委派启用了 DNSSEC，按注册商说明撤销旧 DS 记录。带着失效 DNSSEC 更换 nameservers 可能导致整个域名无法访问。
+4. 在域名注册商后台，把原有权威 nameservers 替换为 Cloudflare 分配的两个地址，必须完整准确复制。
+5. 等待 zone 变为 Active，并独立检查 NS 结果。公共 DNS 缓存可能存在延迟。
+6. zone 激活后，如需 DNSSEC，在 Cloudflare 开启并按流程通过注册商发布新的 DS 信息。
 
-Changing nameservers may take time. Poll at sensible intervals and stop for user action rather than repeatedly resubmitting the same change.
+nameserver 传播需要时间。合理间隔查询，不要反复提交同一个修改；需要用户处理时明确指出具体界面和动作。
 
-## Phase 3: attach the Worker
+## 阶段三：绑定 Worker
 
-Before attaching the hostname, remove only a conflicting web CNAME that blocks the Custom Domain. Do not remove unrelated records.
+绑定前只移除会阻止 Custom Domain 创建的冲突 Web CNAME，不删除无关记录。
 
-Dashboard path:
+Cloudflare Dashboard 路径：
 
-`Workers & Pages` → select Worker → `Settings` → `Domains & Routes` → `Add` → `Custom Domain`
+`Workers & Pages` → 选择 Worker → `Settings` → `Domains & Routes` → `Add` → `Custom Domain`
 
-Wrangler source configuration shape:
+Wrangler 源配置形态：
 
 ```jsonc
 {
@@ -46,41 +46,41 @@ Wrangler source configuration shape:
 }
 ```
 
-Run the repository's normal build/deploy path afterward. When a framework build generates a deployment config, edit the source Wrangler file and confirm the generated output contains the route rather than editing generated files directly.
+随后运行仓库正常的构建与部署流程。如果框架会生成最终部署配置，应修改源 Wrangler 文件并检查生成结果是否包含 route，不直接编辑生成文件。
 
-The application may also need its production URL changed. Search rather than guessing:
+应用通常还需要更新生产网址。先搜索再判断，不要凭感觉改：
 
 ```sh
 rg -n "workers\\.dev|BASE_URL|PUBLIC_SITE_URL|SITE_URL|ORIGIN|TRUSTED_ORIGINS|CORS|CALLBACK|COOKIE" .
 ```
 
-Keep secrets out of the search output and logs. OAuth callback or webhook changes in third-party consoles are separate external mutations and require the appropriate user authorization.
+搜索输出和日志中不得出现密钥。修改第三方 OAuth callback 或 webhook 是独立的外部变更，必须拥有用户授权。
 
-## Phase 4: canonical host and validation
+## 阶段四：主网址与验收
 
-If the alternate hostname should redirect, use a Cloudflare redirect rule and a proxied originless DNS record as described in the current redirect documentation. If both hostnames should serve the Worker, declare both exact Custom Domains and ensure the application emits one canonical URL.
+如果备用主机名需要跳转，按 Cloudflare 当前文档创建 Redirect Rule 和代理的 originless DNS 记录。如果两个主机名都要直接运行 Worker，则声明两个精确 Custom Domains，并确保页面只输出一个 canonical URL。
 
-Acceptance checks:
+验收清单：
 
-- Cloudflare shows the zone active.
-- Authoritative NS results match Cloudflare's assigned nameservers.
-- The canonical hostname resolves and completes TLS without a certificate warning.
-- The Worker serves expected pages, assets, APIs, and direct deep links on the custom domain.
-- The alternate hostname serves or redirects exactly as intended, with no loop.
-- Login/session cookies and OAuth callbacks use the new origin.
-- Sitemap, feeds, Open Graph URLs, canonical tags, and robots references use the production domain where applicable.
-- Existing mail and verification DNS records still resolve.
-- The prior `workers.dev` endpoint remains available for diagnosis unless intentionally disabled.
+- Cloudflare 显示 zone 为 Active。
+- 权威 NS 与 Cloudflare 分配的 nameservers 一致。
+- 正式域名可以解析，TLS 握手没有证书警告。
+- Worker 在自定义域名下可以正确返回页面、资源、API 和深层路由。
+- 备用域名按预期访问或跳转，没有循环。
+- 登录、session cookie 和 OAuth callbacks 使用新域名。
+- 适用时，sitemap、feeds、Open Graph URL、canonical 标签和 robots 引用正式域名。
+- 原有邮件和验证 DNS 记录仍然可以解析。
+- 除非有意关闭，原 `workers.dev` 地址仍可用于诊断。
 
-## Rollback
+## 回退
 
-If the Worker custom domain fails after the zone is active, remove or revert the application hostname change and custom-domain route while retaining the known-good `workers.dev` endpoint. If the nameserver migration itself fails, restore the registrar's previous nameservers and DNSSEC state from the recorded baseline. Explain that resolver caches may delay recovery.
+如果 zone 已激活但 Worker Custom Domain 失败，先撤销应用网址改动和 custom-domain route，同时保留已知可用的 `workers.dev` 入口。如果 nameserver 迁移本身失败，按照基线记录恢复注册商原 nameservers 和 DNSSEC 状态，并说明 DNS 缓存可能延迟恢复。
 
-## Current authoritative sources
+## 权威资料
 
-- Full DNS zone setup: <https://developers.cloudflare.com/dns/zone-setups/full-setup/setup/>
-- Worker Custom Domains: <https://developers.cloudflare.com/workers/configuration/routing/custom-domains/>
-- Redirect `www` to apex: <https://developers.cloudflare.com/rules/url-forwarding/examples/redirect-www-to-root/>
-- Redirect apex to `www`: <https://developers.cloudflare.com/rules/url-forwarding/examples/redirect-root-to-www/>
-- DNSSEC: <https://developers.cloudflare.com/dns/dnssec/>
-- Universal SSL: <https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/>
+- Full zone setup：<https://developers.cloudflare.com/dns/zone-setups/full-setup/setup/>
+- Worker Custom Domains：<https://developers.cloudflare.com/workers/configuration/routing/custom-domains/>
+- `www` 跳转到根域名：<https://developers.cloudflare.com/rules/url-forwarding/examples/redirect-www-to-root/>
+- 根域名跳转到 `www`：<https://developers.cloudflare.com/rules/url-forwarding/examples/redirect-root-to-www/>
+- DNSSEC：<https://developers.cloudflare.com/dns/dnssec/>
+- Universal SSL：<https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/>

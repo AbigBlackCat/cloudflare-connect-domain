@@ -1,4 +1,4 @@
 interface:
-  display_name: "Cloudflare Connect Domain"
-  short_description: "Connect an owned domain to a deployed Cloudflare website"
-  default_prompt: "Use $cloudflare-connect-domain to connect my domain to this deployed Cloudflare website."
+  display_name: "域名接入 Cloudflare"
+  short_description: "把已有域名接入 Cloudflare 并绑定网站"
+  default_prompt: "使用 $cloudflare-connect-domain 把我的域名接入 Cloudflare，并绑定到已经部署的网站。"

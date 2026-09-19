@@ -1,46 +1,46 @@
 ---
 name: cloudflare-connect-domain
-description: Onboard an owned domain to Cloudflare authoritative DNS and connect it to an already deployed Cloudflare Worker website. Use after a site works on workers.dev and the user has a registered domain; do not use for buying a domain or a first website deployment.
+description: 将用户已拥有的域名接入 Cloudflare 权威 DNS，并绑定到已经部署的 Cloudflare Worker 网站。适用于网站已能通过 workers.dev 访问、用户也已注册域名的情况；不用于购买域名或首次部署网站。
 ---
 
-# Cloudflare Connect Domain
+# 将域名接入 Cloudflare
 
-Move DNS authority deliberately, then attach the verified hostname to the existing Worker. Keep domain registration, DNS hosting, and website hosting conceptually separate: this workflow normally changes authoritative DNS, not the registrar of record.
+先稳妥迁移 DNS 权威，再把确认过的主机名绑定到已有 Worker。始终区分域名注册商、DNS 托管商和网站托管平台：本流程通常只改变权威 DNS，不转移域名注册商。
 
-## Establish scope and prerequisites
+## 明确范围与前置条件
 
-1. Confirm the user owns the registered domain and identify its registrar, current nameservers, current DNS provider, target Cloudflare account, deployed Worker, and working `workers.dev` URL.
-2. Decide the canonical hostname: apex (`example.com`) or a subdomain such as `www.example.com`. Decide what the alternate hostname should do.
-3. Inspect the application's source configuration for public base URLs, canonical URLs, cookie domains, trusted origins, CORS, OAuth callbacks, webhooks, sitemap/feed URLs, and environment-specific settings.
-4. Read [references/domain-workflow.md](references/domain-workflow.md) before changing the zone, nameservers, DNS records, or Worker routes.
+1. 确认用户拥有已注册域名，并识别注册商、当前 nameservers、当前 DNS 服务商、目标 Cloudflare 账号、已部署 Worker 和可用的 `workers.dev` 地址。
+2. 确定正式主域名：根域名 `example.com`、`www.example.com` 或 `app.example.com` 等子域名；同时确定另一个常见入口应如何处理。
+3. 检查应用源配置中依赖网址的项目，包括公开基础网址、canonical URL、cookie domain、trusted origins、CORS、OAuth callback、webhook、sitemap 和 feed。
+4. 修改 zone、nameservers、DNS 记录或 Worker routes 前，阅读 [references/domain-workflow.md](references/domain-workflow.md)。
 
-Do not proceed with cutover if the Worker is not independently healthy, the user cannot control the registrar, or the current DNS record inventory is incomplete.
+如果 Worker 本身还不能稳定访问、用户无法控制注册商，或现有 DNS 记录清单不完整，不要执行正式切换。
 
-## Preserve DNS before cutover
+## 切换前保全 DNS
 
-- Inventory the existing A, AAAA, CNAME, MX, TXT, CAA, SRV, verification, and mail-security records. Cloudflare's quick scan is a starting point, not proof of completeness.
-- Preserve mail and third-party verification records exactly unless their provider requires a change. Web records may be replaced only when the new Worker custom domain makes them obsolete.
-- If DNSSEC is active at the old provider or registrar, follow Cloudflare's current migration guidance. For a normal full setup, disable the old DS/DNSSEC delegation before changing nameservers, then re-enable DNSSEC in Cloudflare after the zone is active.
-- If the domain was purchased through Cloudflare Registrar, do not invent a nameserver-switch step; it already uses Cloudflare authoritative DNS.
+- 盘点现有 A、AAAA、CNAME、MX、TXT、CAA、SRV、验证记录和邮件安全记录。Cloudflare 快速扫描只能作为起点，不能当成完整证明。
+- 除非对应服务商明确要求修改，否则保持邮件和第三方验证记录不变。只有新的 Worker Custom Domain 确实替代旧网站记录时，才移除冲突的 Web 记录。
+- 如果旧 DNS 或注册商启用了 DNSSEC，按 Cloudflare 当前迁移指南处理。普通 full setup 通常需要先撤销旧 DS/DNSSEC 委派，再更换 nameservers；zone 激活后再在 Cloudflare 重新启用 DNSSEC。
+- 如果域名直接购买于 Cloudflare Registrar，不要虚构 nameserver 切换步骤；它已经使用 Cloudflare 权威 DNS。
 
-## Onboard the zone
+## 把域名加入 Cloudflare
 
-Add the apex domain to the intended Cloudflare account, review imported records, select the intended plan, and obtain the two assigned Cloudflare nameservers. Nameserver changes occur at the registrar and may require the user to authenticate or confirm them manually.
+在正确账号中添加根域名，检查导入记录，选择用户认可的计划，并获得 Cloudflare 分配的两个 nameservers。注册商处的 nameserver 修改可能需要用户本人登录或确认。
 
-After the registrar change, wait for Cloudflare to report the zone as active and verify authoritative nameservers independently. Do not attach the production hostname while the zone is still pending if that would create a confusing partial cutover.
+修改后，等待 Cloudflare 显示 zone 为 Active，并独立检查权威 NS。若在 Pending 状态继续绑定会造成不清晰的半切换状态，应先等待激活。
 
-## Attach the Worker custom domain
+## 绑定 Worker Custom Domain
 
-- Reconfirm that the hostname has no conflicting CNAME and belongs to the active Cloudflare zone.
-- Prefer a Worker Custom Domain for an originless Worker site. In Wrangler source configuration, use an exact hostname with `custom_domain: true`; Custom Domains match exact hostnames, not wildcards.
-- Update the application's production public/base/canonical URLs and any trusted-origin, cookie, OAuth, webhook, or CORS configuration that depends on the hostname. Update external OAuth/webhook consoles only with explicit user authorization and credentials.
-- Deploy with the project's pinned Wrangler and existing deployment script. Cloudflare creates the Worker DNS record and certificate for a Custom Domain; do not add a competing manual CNAME.
-- Configure the alternate `www` or apex hostname explicitly. Either attach both exact hostnames when both should serve the app, or create a proxied redirect to the canonical hostname using the current Cloudflare guidance.
+- 再次确认目标主机名没有冲突 CNAME，且属于已激活的 Cloudflare zone。
+- 对没有独立源站的 Worker 网站，优先使用 Worker Custom Domain。在 Wrangler 源配置中写入精确主机名并设置 `custom_domain: true`；Custom Domain 精确匹配主机名，不支持通配符替代。
+- 更新应用的生产公开网址、基础网址、canonical URL，以及受主机名影响的 trusted origin、cookie、OAuth、webhook 或 CORS 配置。修改第三方 OAuth/webhook 控制台属于额外外部操作，需要相应授权和凭据。
+- 使用项目锁定的 Wrangler 和现有部署脚本重新部署。Cloudflare 会为 Custom Domain 创建 Worker DNS 记录和证书，不要再添加冲突的手工 CNAME。
+- 显式处理另一个 `www` 或根域名入口：如果两个都要直接访问应用，就声明两个精确 Custom Domains；如果只保留一个主网址，就按当前 Cloudflare 指南设置代理 DNS 记录和重定向。
 
-Keep `workers.dev` enabled as a diagnostic fallback unless the user explicitly asks to disable it and the custom domain has passed verification.
+除非用户明确要求关闭，并且自定义域名已经通过完整验证，否则保留 `workers.dev` 作为诊断备用入口。
 
-## Verify and hand off
+## 验证与交付
 
-Verify Cloudflare zone status, authoritative NS, DNS answers, HTTPS certificate, canonical redirects, representative routes/assets, authentication and cookies, APIs, feeds/sitemaps, and any callback-dependent integration. Test both the canonical and alternate hostnames and check for redirect loops.
+验证 Cloudflare zone 状态、权威 NS、DNS 解析、HTTPS 证书、canonical 重定向、代表性页面与资源、登录和 cookie、API、feed/sitemap，以及依赖 callback 的集成。主域名和备用域名都要测试，并检查是否出现重定向循环。
 
-Finish with the zone/account, registrar, canonical hostname, Worker, nameservers, Custom Domains and redirects created, application settings updated, DNSSEC state, checks performed, propagation caveats, and any remaining manual steps. Never claim completion solely because the nameserver form was submitted.
+最终交付 zone/账号、注册商、正式主机名、Worker、nameservers、创建的 Custom Domains 和重定向、更新过的应用设置、DNSSEC 状态、验证结果、传播等待说明和剩余人工步骤。不能因为已经提交 nameserver 表单就宣称完成。
