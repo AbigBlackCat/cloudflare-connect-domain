@@ -292,5 +292,3 @@ cloudflare-connect-domain/
 - [Cloudflare DNSSEC](https://developers.cloudflare.com/dns/dnssec/)
 - [Agent Skills 标准](https://agentskills.io)
 - [Vercel Labs skills CLI](https://github.com/vercel-labs/skills)
-
-README 的信息组织方式参考了 [zhangxuefeng-skill](https://github.com/alchaincyf/zhangxuefeng-skill)：先让非技术用户理解用途，再提供跨 Agent 安装、可复制提示词、完整流程和常见问题。
