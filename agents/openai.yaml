@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cloudflare Connect Domain"
+  short_description: "Connect an owned domain to a deployed Cloudflare website"
+  default_prompt: "Use $cloudflare-connect-domain to connect my domain to this deployed Cloudflare website."
